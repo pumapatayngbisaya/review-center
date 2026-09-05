@@ -46,11 +46,22 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 
-// Mobile hamburger
+// Navigation controls
+const sidebarToggle = document.getElementById('sidebarToggle');
 document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
 });
 
+sidebarToggle.addEventListener('click', () => {
+  document.body.classList.toggle('sidebar-collapsed');
+  sidebarToggle.textContent = document.body.classList.contains('sidebar-collapsed') ? '›' : '‹';
+  sidebarToggle.setAttribute(
+    'aria-label',
+    document.body.classList.contains('sidebar-collapsed')
+      ? 'Expand navigation'
+      : 'Collapse navigation'
+  );
+});
 
 // ─── Suggestion Modal ────────────────────────
 const suggestBtn = document.getElementById('suggestBtn');
@@ -60,6 +71,7 @@ const closeSuggestBtn = document.getElementById('closeSuggestBtn');
 const copySuggestBtn = document.getElementById('copySuggestBtn');
 const suggestionText = document.getElementById('suggestionText');
 const copyConfirm = document.getElementById('copyConfirm');
+const newUploadBtn = document.getElementById('newUploadBtn');
 
 
 suggestBtn.addEventListener('click', () => {
@@ -110,31 +122,11 @@ copySuggestBtn.addEventListener('click', () => {
     return;
   }
 
-  navigator.clipboard.writeText(text).then(() => {
-    copyConfirm.style.display = 'block';
-
-    setTimeout(() => {
-      copyConfirm.style.display = 'none';
-    }, 3000);
-
-  }).catch(() => {
-    // Fallback for older browsers
-    const ta = document.createElement('textarea');
-
-    ta.value = text;
-    document.body.appendChild(ta);
-
-    ta.select();
-    document.execCommand('copy');
-
-    document.body.removeChild(ta);
-
-    copyConfirm.style.display = 'block';
-
-    setTimeout(() => {
-      copyConfirm.style.display = 'none';
-    }, 3000);
-  });
+  const subject = encodeURIComponent('GeraBananini Feature Suggestion');
+  const body = encodeURIComponent(text);
+  window.location.href = `mailto:johngeraban30@gmail.com?subject=${subject}&body=${body}`;
+  copyConfirm.textContent = '✅ Your email app is opening.';
+  copyConfirm.style.display = 'block';
 });
 
 
@@ -191,12 +183,18 @@ clearFileBtn.addEventListener('click', () => {
 
 
 function handleFile(file) {
-  const allowed = ['text/plain', 'application/pdf'];
+  const allowed = [
+    'text/plain',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ];
   const ext = file.name.split('.').pop().toLowerCase();
   const isImage = file.type.startsWith('image/');
+  const isOfficeFile = ext === 'docx' || ext === 'pptx';
 
-  if (!allowed.includes(file.type) && ext !== 'txt' && ext !== 'pdf' && !isImage) {
-    alert('Please upload a .txt, .pdf, or image file.');
+  if (!allowed.includes(file.type) && !['txt', 'pdf', 'docx', 'pptx'].includes(ext) && !isImage) {
+    alert('Please upload a .txt, .pdf, .docx, .pptx, or image file.');
     return;
   }
 
@@ -210,6 +208,8 @@ function handleFile(file) {
     readImage(file);
   } else if (file.type === 'application/pdf' || ext === 'pdf') {
     readPDF(file);
+  } else if (isOfficeFile) {
+    readOfficeFile(file, ext);
   } else {
     readText(file);
   }
@@ -274,6 +274,63 @@ function readText(file) {
   };
 
   reader.readAsText(file);
+}
+
+// ─── DOCX/PPTX Reading ────────────────────────
+async function readOfficeFile(file, extension) {
+  loadingOverlay.style.display = 'flex';
+  loadingOverlay.querySelector('p').textContent = `Reading ${extension.toUpperCase()} lesson...`;
+
+  try {
+    if (extension === 'docx') {
+      if (typeof mammoth === 'undefined') {
+        throw new Error('DOCX reader is unavailable.');
+      }
+
+      const result = await mammoth.extractRawText({
+        arrayBuffer: await file.arrayBuffer()
+      });
+      state.rawText = result.value.trim();
+    } else {
+      if (typeof JSZip === 'undefined') {
+        throw new Error('PPTX reader is unavailable.');
+      }
+
+      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+      const slideNames = Object.keys(zip.files)
+        .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+        .sort((a, b) => {
+          const number = name => Number(name.match(/slide(\d+)/)[1]);
+          return number(a) - number(b);
+        });
+      const parser = new DOMParser();
+      const slideTexts = [];
+
+      for (const name of slideNames) {
+        const xml = await zip.files[name].async('text');
+        const document = parser.parseFromString(xml, 'application/xml');
+        const text = [...document.getElementsByTagName('a:t')]
+          .map(node => node.textContent || '')
+          .join(' ')
+          .trim();
+        if (text) slideTexts.push(text);
+      }
+
+      state.rawText = slideTexts.join('\n\n').trim();
+    }
+
+    if (!state.rawText) {
+      throw new Error('No readable text was found.');
+    }
+    showContent();
+  } catch (error) {
+    console.error(`${extension.toUpperCase()} reading error:`, error);
+    alert(`⚠️ Could not read text from this ${extension.toUpperCase()} file. It may contain only images or unsupported formatting.`);
+    resetUpload();
+  } finally {
+    loadingOverlay.style.display = 'none';
+    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
+  }
 }
 
 
@@ -445,10 +502,12 @@ async function loadRelatedSources(keywords) {
 
 
 function generateReview(text) {
-  const sentences = splitSentences(text);
+  const academicText = filterAcademicContent(text);
+  const units = splitAcademicUnits(academicText);
+  const sentences = splitSentences(academicText);
 
   const words =
-    text.toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
+    academicText.toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
 
   // Word frequency
   const freq = {};
@@ -550,13 +609,7 @@ function generateReview(text) {
     .map(e => e[0]);
 
 
-  // Key sentences = those containing top words
   const keySentences = sentences
-    .filter(s => {
-      const wordCount = s.split(/\s+/).length;
-
-      return wordCount > 6 && wordCount < 60;
-    })
     .map(s => ({
       text: s.trim(),
       score: topWords.filter(w =>
@@ -567,50 +620,63 @@ function generateReview(text) {
     .slice(0, 8)
     .map(s => s.text);
 
-
-  // Group into a mini review structure
   const intro =
     keySentences[0] ||
-    sentences[0] ||
+    units[0] ||
     '';
 
   const mainPoints =
-    keySentences.slice(1, 5);
+    keySentences.slice(1, 8);
 
   const conclusion =
     keySentences[5] ||
     keySentences[keySentences.length - 1] ||
     '';
 
-
   return {
     intro,
     mainPoints,
     conclusion,
     topWords,
-    totalWords: words.length
+    totalWords: words.length,
+    cleanedText: academicText,
+    units,
+    codeBlocks: extractCodeBlocks(academicText),
+    references: getReferences(academicText)
   };
 }
 
 
 function renderReview(data) {
   const div = document.getElementById('reviewText');
+  const detailedUnits = data.units.length
+    ? data.units.map(unit => `<li>${escHtml(makePlainLanguage(unit))}</li>`).join('')
+    : '<li>No academic text could be separated from this file.</li>';
+  const codeBlocks = data.codeBlocks.length
+    ? data.codeBlocks.map(code => `<pre><code>${escHtml(code)}</code></pre>`).join('')
+    : '<p>No code examples were found in the source.</p>';
+  const references = data.references
+    .map(reference => `
+      <li><a href="${reference.url}" target="_blank" rel="noopener noreferrer">
+        ${escHtml(reference.label)}
+      </a></li>
+    `)
+    .join('');
 
   div.innerHTML = `
-    <h3>🔍 Overview</h3>
-    <p>${escHtml(data.intro)}</p>
+    <h3>SECTION 1: FULL DETAILED REVIEWER</h3>
+    <p><strong>What this means:</strong> ${escHtml(makePlainLanguage(data.intro))}</p>
+    <p>This section keeps every academic sentence found in the source after removing school names, page labels, and other document clutter.</p>
+    <ul>${detailedUnits}</ul>
+    <h4>Code and syntax found in the lesson</h4>
+    ${codeBlocks}
 
-    <h3>📌 Key Points</h3>
+    <h3>SECTION 2: EXECUTIVE REVIEW SUMMARY</h3>
     <ul>
-      ${data.mainPoints
-        .map(p => `<li>${escHtml(p)}</li>`)
-        .join('')}
+      ${data.mainPoints.map(point => `<li>${escHtml(makePlainLanguage(point))}</li>`).join('')}
     </ul>
-
-    <h3>💡 Conclusion</h3>
-    <p>${escHtml(data.conclusion)}</p>
-
-    <h3>🔑 Key Terms</h3>
+    <p><strong>Main idea:</strong> ${escHtml(makePlainLanguage(data.conclusion))}</p>
+    <p><strong>Words processed:</strong> ${data.totalWords.toLocaleString()}</p>
     <p style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
       ${data.topWords
         .map(
@@ -620,12 +686,17 @@ function renderReview(data) {
         .join('')}
     </p>
 
-    <p style="margin-top:20px;font-size:.8rem;color:#A0AEC0;">
-      📊 ${data.totalWords.toLocaleString()} words processed
-    </p>
+    <h3>SECTION 3: CURATED HIGH-VALUE REFERENCES</h3>
+    <ul>${references}</ul>
+
+    <h3>SECTION 4: SYSTEM RE-RUN TRIGGER</h3>
+    <div class="review-trigger">
+      <button class="btn btn-primary" id="rewriteInlineBtn">↻ Rewrite Again</button>
+    </div>
   `;
 
   reviewSection.style.display = 'block';
+  document.getElementById('rewriteInlineBtn').addEventListener('click', rerunReview);
 
   document
     .getElementById('reviewSection')
@@ -635,12 +706,28 @@ function renderReview(data) {
     });
 }
 
+function rerunReview() {
+  if (!state.rawText.trim()) return;
+  state.reviewData = generateReview(state.rawText);
+  state.quizData = generateQuiz(state.rawText);
+  renderReview(state.reviewData);
+  saveSession();
+  loadRelatedSources(state.reviewData.topWords);
+}
+
+document.getElementById('rewriteBtn').addEventListener('click', rerunReview);
+
 
 document
   .getElementById('goToQuizBtn')
   .addEventListener('click', () => {
     navigateTo('quiz');
   });
+
+newUploadBtn.addEventListener('click', () => {
+  resetUpload();
+  navigateTo('upload');
+});
 
 
 // ─── Quiz Generation ─────────────────────────
@@ -1251,6 +1338,9 @@ function saveSession() {
     name: state.fileName,
     date: new Date().toLocaleString(),
     score: null,
+    rawText: state.rawText,
+    reviewData: state.reviewData,
+    quizData: state.quizData,
 
     keyTerms:
       state.reviewData
@@ -1381,6 +1471,10 @@ function renderHistory() {
 
       </div>
 
+      <div class="history-actions">
+        <button class="btn btn-sm btn-primary session-open">Open</button>
+        <button class="btn btn-sm btn-ghost session-delete">Delete</button>
+      </div>
       <span class="history-score">
         ${
           s.score !== null
@@ -1390,11 +1484,96 @@ function renderHistory() {
       </span>
     `;
 
-
+    el.querySelector('.session-open').addEventListener('click', () => openSession(s));
+    el.querySelector('.session-delete').addEventListener('click', () => {
+      const remaining = getSessions().filter(session => session !== s);
+      localStorage.setItem('gera_sessions', JSON.stringify(remaining));
+      renderHistory();
+    });
     list.appendChild(el);
   });
 }
 
+function openSession(session) {
+  if (!session.rawText || !session.reviewData) {
+    alert('This older session does not contain a saved review. Please upload the file again.');
+    return;
+  }
+
+  state.fileName = session.name;
+  state.rawText = session.rawText;
+  state.reviewData = session.reviewData;
+  state.quizData = session.quizData || generateQuiz(session.rawText);
+  fileNameEl.textContent = '📄 ' + session.name;
+  fileInfo.style.display = 'flex';
+  showContent();
+  renderReview(state.reviewData);
+  navigateTo('upload');
+}
+
+
+// ─── Review extraction utilities ─────────────
+function filterAcademicContent(text) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/COLLEGE OF COMPUTER STUDIES CITY OF MALABON UNIVERSITY(?: FOUNDED 1994)?/gi, '')
+    .replace(/\b(?:CMU|CITY OF MALABON UNIVERSITY)\b/gi, '')
+    .replace(/\bCOLLEGE OF COMPUTER STUDIES\b/gi, '')
+    .replace(/\b(?:Computer Programming\s*\d*|Lesson\s*\d+|Chapter\s*\d+|Course Code\s*[:#]?\s*\S+)\b/gi, '')
+    .replace(/(?:page|slide)\s*\d+\s*(?:of\s*\d+)?/gi, '')
+    .replace(/\b(?:professor|instructor|teacher)\s*[:\-].*?(?=\n|$)/gi, '')
+    .replace(/\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function splitAcademicUnits(text) {
+  return text
+    .replace(/([.!?])\s+/g, '$1\n')
+    .replace(/;\s+/g, ';\n')
+    .split(/\n+/)
+    .map(unit => unit.trim())
+    .filter(unit => unit.length > 10);
+}
+
+function extractCodeBlocks(text) {
+  const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const codeLines = lines.filter(line =>
+    /#include|using namespace|int main|void \w+\s*\(|\breturn\s+[^.]+;|<\w+[^>]*>|[.#][\w-]+\s*\{|[a-z-]+\s*:\s*[^;]+;/.test(line)
+  );
+
+  return codeLines.length ? [codeLines.join('\n')] : [];
+}
+
+function getReferences(text) {
+  const lower = text.toLowerCase();
+  const references = [];
+  if (/\bc\+\+|recursion|function|parameter|return value/.test(lower)) {
+    references.push(
+      { label: 'cppreference: Functions', url: 'https://en.cppreference.com/w/cpp/language/functions' },
+      { label: 'cppreference: Recursion', url: 'https://en.cppreference.com/w/cpp/language/functions' }
+    );
+  }
+  if (/\bhtml|element|tag|markup/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: HTML', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML' });
+  }
+  if (/\bcss|selector|property|style/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: CSS', url: 'https://developer.mozilla.org/en-US/docs/Web/CSS' });
+  }
+  if (/\bjavascript|function|array|dom/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: JavaScript', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript' });
+  }
+
+  if (references.length < 3) {
+    references.push(
+      { label: 'Khan Academy: Study and learning resources', url: 'https://www.khanacademy.org/' },
+      { label: 'Wikipedia: Search the lesson topic', url: `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(text.split(/\s+/).slice(0, 6).join(' '))}` }
+    );
+  }
+
+  return references.slice(0, 5);
+}
 
 // ─── Utilities ───────────────────────────────
 function splitSentences(text) {
@@ -1404,6 +1583,19 @@ function splitSentences(text) {
     .split('\n')
     .map(s => s.trim())
     .filter(s => s.length > 15);
+}
+
+function makePlainLanguage(sentence) {
+  return sentence
+    .replace(/\butilize\b/gi, 'use')
+    .replace(/\bapproximately\b/gi, 'about')
+    .replace(/\bdemonstrate\b/gi, 'show')
+    .replace(/\bin order to\b/gi, 'to')
+    .replace(/\ba significant number of\b/gi, 'many')
+    .replace(/\bprior to\b/gi, 'before')
+    .replace(/\bsubsequent to\b/gi, 'after')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 
