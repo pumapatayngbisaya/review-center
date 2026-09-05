@@ -416,6 +416,8 @@ function cleanExtractedText(text) {
 
 
 function showContent() {
+  // Hide institutional headers from the user-facing preview as well as the review.
+  state.rawText = filterAcademicContent(state.rawText);
   contentArea.style.display = 'block';
 
   const wordCount = state.rawText.trim()
@@ -1536,15 +1538,17 @@ function openSession(session) {
 function filterAcademicContent(text) {
   return text
     .replace(/\r\n/g, '\n')
-    .replace(/COLLEGE OF COMPUTER STUDIES CITY OF MALABON UNIVERSITY(?: FOUNDED 1994)?/gi, '')
-    .replace(/\b(?:CMU|CITY OF MALABON UNIVERSITY)\b/gi, '')
-    .replace(/\bCOLLEGE OF COMPUTER STUDIES\b/gi, '')
-    .replace(/\b(?:Computer Programming\s*\d*|Lesson\s*\d+|Chapter\s*\d+|Course Code\s*[:#]?\s*\S+)\b/gi, '')
+    .replace(/(?:CITY\s+OF\s+MALABON\s+UNIVERSITY\s+FOUNDED\s+1994|CITY\s+OF\s+MALABON\s+UNIVERSITY|COLLEGE\s+OF\s+COMPUTER\s+STUDIES)/gi, '')
+    .replace(/\bCMU\b/gi, '')
+    .replace(/\b(?:CC\d{2,4}\s+)?Computer\s+Programming\s*\d*\b/gi, '')
+    .replace(/\b(?:Lesson\s+\d+|Chapter\s+\d+|Course\s+Code\s*[:#]?\s*\S+)\b/gi, '')
     .replace(/(?:page|slide)\s*\d+\s*(?:of\s*\d+)?/gi, '')
     .replace(/\b(?:professor|instructor|teacher)\s*[:\-].*?(?=\n|$)/gi, '')
     .replace(/\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/gi, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map(line => line.replace(/[ \t]{2,}/g, ' ').trim())
+    .filter(line => line.length > 0)
+    .join('\n')
     .trim();
 }
 
