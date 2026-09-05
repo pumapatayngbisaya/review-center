@@ -524,6 +524,11 @@ function generateReview(text) {
   const academicText = filterAcademicContent(text);
   const units = splitAcademicUnits(academicText);
   const sentences = splitSentences(academicText);
+  const summarySentences = sentences
+    .filter(sentence => !looksLikeCode(sentence))
+    .filter(sentence => !/^\s*(example|output|input)\s*:/i.test(sentence))
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length >= 25);
 
   const words =
     academicText.toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
@@ -628,7 +633,7 @@ function generateReview(text) {
     .map(e => e[0]);
 
 
-  const keySentences = sentences
+  const keySentences = summarySentences
     .map(s => ({
       text: s.trim(),
       score: topWords.filter(w =>
@@ -645,7 +650,7 @@ function generateReview(text) {
     '';
 
   const mainPoints =
-    keySentences.slice(1, 8);
+    keySentences.slice(1, 6);
 
   const conclusion =
     keySentences[5] ||
@@ -691,9 +696,9 @@ function renderReview(data) {
     ${codeBlocks}
 
     <h3>SECTION 2: EXECUTIVE REVIEW SUMMARY</h3>
-    <ul>
-      ${data.mainPoints.map(point => `<li>${escHtml(makePlainLanguage(point))}</li>`).join('')}
-    </ul>
+    <div class="summary-points">
+      ${data.mainPoints.map(point => `<p>${escHtml(makePlainLanguage(point))}</p>`).join('')}
+    </div>
     <p><strong>Main idea:</strong> ${escHtml(makePlainLanguage(data.conclusion))}</p>
     <p><strong>Words processed:</strong> ${data.totalWords.toLocaleString()}</p>
     <p style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
@@ -1607,6 +1612,10 @@ function splitSentences(text) {
     .split('\n')
     .map(s => s.trim())
     .filter(s => s.length > 15);
+}
+
+function looksLikeCode(text) {
+  return /#include|using namespace|int\s+main\s*\(|\b(if|else|for|while)\s*\(|\b(return|cout|cin)\b|[{};]|<iostream>/.test(text);
 }
 
 function makePlainLanguage(sentence) {
