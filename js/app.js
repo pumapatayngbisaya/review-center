@@ -191,12 +191,18 @@ clearFileBtn.addEventListener('click', () => {
 
 
 function handleFile(file) {
-  const allowed = ['text/plain', 'application/pdf'];
+  const allowed = [
+    'text/plain',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ];
   const ext = file.name.split('.').pop().toLowerCase();
   const isImage = file.type.startsWith('image/');
+  const isOfficeFile = ext === 'docx' || ext === 'pptx';
 
-  if (!allowed.includes(file.type) && ext !== 'txt' && ext !== 'pdf' && !isImage) {
-    alert('Please upload a .txt, .pdf, or image file.');
+  if (!allowed.includes(file.type) && !['txt', 'pdf', 'docx', 'pptx'].includes(ext) && !isImage) {
+    alert('Please upload a .txt, .pdf, .docx, .pptx, or image file.');
     return;
   }
 
@@ -210,6 +216,8 @@ function handleFile(file) {
     readImage(file);
   } else if (file.type === 'application/pdf' || ext === 'pdf') {
     readPDF(file);
+  } else if (isOfficeFile) {
+    readOfficeFile(file, ext);
   } else {
     readText(file);
   }
@@ -274,6 +282,63 @@ function readText(file) {
   };
 
   reader.readAsText(file);
+}
+
+// ─── DOCX/PPTX Reading ────────────────────────
+async function readOfficeFile(file, extension) {
+  loadingOverlay.style.display = 'flex';
+  loadingOverlay.querySelector('p').textContent = `Reading ${extension.toUpperCase()} lesson...`;
+
+  try {
+    if (extension === 'docx') {
+      if (typeof mammoth === 'undefined') {
+        throw new Error('DOCX reader is unavailable.');
+      }
+
+      const result = await mammoth.extractRawText({
+        arrayBuffer: await file.arrayBuffer()
+      });
+      state.rawText = result.value.trim();
+    } else {
+      if (typeof JSZip === 'undefined') {
+        throw new Error('PPTX reader is unavailable.');
+      }
+
+      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+      const slideNames = Object.keys(zip.files)
+        .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+        .sort((a, b) => {
+          const number = name => Number(name.match(/slide(\d+)/)[1]);
+          return number(a) - number(b);
+        });
+      const parser = new DOMParser();
+      const slideTexts = [];
+
+      for (const name of slideNames) {
+        const xml = await zip.files[name].async('text');
+        const document = parser.parseFromString(xml, 'application/xml');
+        const text = [...document.getElementsByTagName('a:t')]
+          .map(node => node.textContent || '')
+          .join(' ')
+          .trim();
+        if (text) slideTexts.push(text);
+      }
+
+      state.rawText = slideTexts.join('\n\n').trim();
+    }
+
+    if (!state.rawText) {
+      throw new Error('No readable text was found.');
+    }
+    showContent();
+  } catch (error) {
+    console.error(`${extension.toUpperCase()} reading error:`, error);
+    alert(`⚠️ Could not read text from this ${extension.toUpperCase()} file. It may contain only images or unsupported formatting.`);
+    resetUpload();
+  } finally {
+    loadingOverlay.style.display = 'none';
+    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
+  }
 }
 
 
@@ -597,17 +662,17 @@ function renderReview(data) {
   const div = document.getElementById('reviewText');
 
   div.innerHTML = `
-    <h3>🔍 Overview</h3>
+    <h3>🔍 What this lesson is about</h3>
     <p>${escHtml(data.intro)}</p>
 
-    <h3>📌 Key Points</h3>
+    <h3>📌 Important things to remember</h3>
     <ul>
       ${data.mainPoints
-        .map(p => `<li>${escHtml(p)}</li>`)
+        .map(p => `<li>${escHtml(makePlainLanguage(p))}</li>`)
         .join('')}
     </ul>
 
-    <h3>💡 Conclusion</h3>
+    <h3>💡 The main idea</h3>
     <p>${escHtml(data.conclusion)}</p>
 
     <h3>🔑 Key Terms</h3>
@@ -1404,6 +1469,19 @@ function splitSentences(text) {
     .split('\n')
     .map(s => s.trim())
     .filter(s => s.length > 15);
+}
+
+function makePlainLanguage(sentence) {
+  return sentence
+    .replace(/\butilize\b/gi, 'use')
+    .replace(/\bapproximately\b/gi, 'about')
+    .replace(/\bdemonstrate\b/gi, 'show')
+    .replace(/\bin order to\b/gi, 'to')
+    .replace(/\ba significant number of\b/gi, 'many')
+    .replace(/\bprior to\b/gi, 'before')
+    .replace(/\bsubsequent to\b/gi, 'after')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 
