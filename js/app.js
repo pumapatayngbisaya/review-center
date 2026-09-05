@@ -669,8 +669,8 @@ function generateReview(text) {
 function renderReview(data) {
   const div = document.getElementById('reviewText');
   const detailedUnits = data.units.length
-    ? data.units.map(unit => `<li>${escHtml(makePlainLanguage(unit))}</li>`).join('')
-    : '<li>No academic text could be separated from this file.</li>';
+    ? data.units.map(unit => `<p>${escHtml(makePlainLanguage(unit))}</p>`).join('')
+    : '<p>No academic text could be separated from this file.</p>';
   const codeBlocks = data.codeBlocks.length
     ? data.codeBlocks.map(code => `<pre><code>${escHtml(code)}</code></pre>`).join('')
     : '<p>No code examples were found in the source.</p>';
@@ -685,8 +685,8 @@ function renderReview(data) {
   div.innerHTML = `
     <h3>SECTION 1: FULL DETAILED REVIEWER</h3>
     <p><strong>What this means:</strong> ${escHtml(makePlainLanguage(data.intro))}</p>
-    <p>This section keeps every academic sentence found in the source after removing school names, page labels, and other document clutter.</p>
-    <ul>${detailedUnits}</ul>
+    <p>This section keeps the lesson in its original paragraph flow after removing school names, page labels, and other document clutter.</p>
+    <div class="review-details">${detailedUnits}</div>
     <h4>Code and syntax found in the lesson</h4>
     ${codeBlocks}
 
@@ -1554,10 +1554,10 @@ function filterAcademicContent(text) {
 
 function splitAcademicUnits(text) {
   return text
-    .replace(/([.!?])\s+/g, '$1\n')
-    .replace(/;\s+/g, ';\n')
-    .split(/\n+/)
-    .map(unit => unit.trim())
+    // Keep punctuation inside the paragraph; only an actual blank line starts a new unit.
+    .replace(/\r\n/g, '\n')
+    .split(/\n\s*\n+/)
+    .map(unit => unit.replace(/\s*\n\s*/g, ' ').trim())
     .filter(unit => unit.length > 10);
 }
 
