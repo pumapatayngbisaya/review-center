@@ -470,6 +470,25 @@ body {
   margin-bottom: 6px;
 }
 
+.review-body pre {
+  background: var(--navy);
+  color: #F8F9FA;
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  line-height: 1.55;
+  margin: 12px 0 18px;
+}
+
+.review-body code {
+  font-family: Consolas, Monaco, monospace;
+  font-size: .86rem;
+}
+
+.review-trigger {
+  margin-top: 22px;
+}
+
 .action-row {
   display: flex;
   gap: 12px;
