@@ -510,10 +510,12 @@ async function loadRelatedSources(keywords) {
 
 
 function generateReview(text) {
-  const sentences = splitSentences(text);
+  const academicText = filterAcademicContent(text);
+  const units = splitAcademicUnits(academicText);
+  const sentences = splitSentences(academicText);
 
   const words =
-    text.toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
+    academicText.toLowerCase().match(/\b[a-z]{4,}\b/g) || [];
 
   // Word frequency
   const freq = {};
@@ -615,13 +617,7 @@ function generateReview(text) {
     .map(e => e[0]);
 
 
-  // Key sentences = those containing top words
   const keySentences = sentences
-    .filter(s => {
-      const wordCount = s.split(/\s+/).length;
-
-      return wordCount > 6 && wordCount < 60;
-    })
     .map(s => ({
       text: s.trim(),
       score: topWords.filter(w =>
@@ -632,50 +628,63 @@ function generateReview(text) {
     .slice(0, 8)
     .map(s => s.text);
 
-
-  // Group into a mini review structure
   const intro =
     keySentences[0] ||
-    sentences[0] ||
+    units[0] ||
     '';
 
   const mainPoints =
-    keySentences.slice(1, 5);
+    keySentences.slice(1, 8);
 
   const conclusion =
     keySentences[5] ||
     keySentences[keySentences.length - 1] ||
     '';
 
-
   return {
     intro,
     mainPoints,
     conclusion,
     topWords,
-    totalWords: words.length
+    totalWords: words.length,
+    cleanedText: academicText,
+    units,
+    codeBlocks: extractCodeBlocks(academicText),
+    references: getReferences(academicText)
   };
 }
 
 
 function renderReview(data) {
   const div = document.getElementById('reviewText');
+  const detailedUnits = data.units.length
+    ? data.units.map(unit => `<li>${escHtml(makePlainLanguage(unit))}</li>`).join('')
+    : '<li>No academic text could be separated from this file.</li>';
+  const codeBlocks = data.codeBlocks.length
+    ? data.codeBlocks.map(code => `<pre><code>${escHtml(code)}</code></pre>`).join('')
+    : '<p>No code examples were found in the source.</p>';
+  const references = data.references
+    .map(reference => `
+      <li><a href="${reference.url}" target="_blank" rel="noopener noreferrer">
+        ${escHtml(reference.label)}
+      </a></li>
+    `)
+    .join('');
 
   div.innerHTML = `
-    <h3>🔍 What this lesson is about</h3>
-    <p>${escHtml(data.intro)}</p>
+    <h3>SECTION 1: FULL DETAILED REVIEWER</h3>
+    <p><strong>What this means:</strong> ${escHtml(makePlainLanguage(data.intro))}</p>
+    <p>This section keeps every academic sentence found in the source after removing school names, page labels, and other document clutter.</p>
+    <ul>${detailedUnits}</ul>
+    <h4>Code and syntax found in the lesson</h4>
+    ${codeBlocks}
 
-    <h3>📌 Important things to remember</h3>
+    <h3>SECTION 2: EXECUTIVE REVIEW SUMMARY</h3>
     <ul>
-      ${data.mainPoints
-        .map(p => `<li>${escHtml(makePlainLanguage(p))}</li>`)
-        .join('')}
+      ${data.mainPoints.map(point => `<li>${escHtml(makePlainLanguage(point))}</li>`).join('')}
     </ul>
-
-    <h3>💡 The main idea</h3>
-    <p>${escHtml(data.conclusion)}</p>
-
-    <h3>🔑 Key Terms</h3>
+    <p><strong>Main idea:</strong> ${escHtml(makePlainLanguage(data.conclusion))}</p>
+    <p><strong>Words processed:</strong> ${data.totalWords.toLocaleString()}</p>
     <p style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
       ${data.topWords
         .map(
@@ -685,12 +694,17 @@ function renderReview(data) {
         .join('')}
     </p>
 
-    <p style="margin-top:20px;font-size:.8rem;color:#A0AEC0;">
-      📊 ${data.totalWords.toLocaleString()} words processed
-    </p>
+    <h3>SECTION 3: CURATED HIGH-VALUE REFERENCES</h3>
+    <ul>${references}</ul>
+
+    <h3>SECTION 4: SYSTEM RE-RUN TRIGGER</h3>
+    <div class="review-trigger">
+      <button class="btn btn-primary" id="rewriteInlineBtn">↻ Rewrite Again</button>
+    </div>
   `;
 
   reviewSection.style.display = 'block';
+  document.getElementById('rewriteInlineBtn').addEventListener('click', rerunReview);
 
   document
     .getElementById('reviewSection')
@@ -699,6 +713,17 @@ function renderReview(data) {
       block: 'start'
     });
 }
+
+function rerunReview() {
+  if (!state.rawText.trim()) return;
+  state.reviewData = generateReview(state.rawText);
+  state.quizData = generateQuiz(state.rawText);
+  renderReview(state.reviewData);
+  saveSession();
+  loadRelatedSources(state.reviewData.topWords);
+}
+
+document.getElementById('rewriteBtn').addEventListener('click', rerunReview);
 
 
 document
@@ -1460,6 +1485,69 @@ function renderHistory() {
   });
 }
 
+
+// ─── Review extraction utilities ─────────────
+function filterAcademicContent(text) {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/COLLEGE OF COMPUTER STUDIES CITY OF MALABON UNIVERSITY(?: FOUNDED 1994)?/gi, '')
+    .replace(/\b(?:CMU|CITY OF MALABON UNIVERSITY)\b/gi, '')
+    .replace(/\bCOLLEGE OF COMPUTER STUDIES\b/gi, '')
+    .replace(/\b(?:Computer Programming\s*\d*|Lesson\s*\d+|Chapter\s*\d+|Course Code\s*[:#]?\s*\S+)\b/gi, '')
+    .replace(/(?:page|slide)\s*\d+\s*(?:of\s*\d+)?/gi, '')
+    .replace(/\b(?:professor|instructor|teacher)\s*[:\-].*?(?=\n|$)/gi, '')
+    .replace(/\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function splitAcademicUnits(text) {
+  return text
+    .replace(/([.!?])\s+/g, '$1\n')
+    .replace(/;\s+/g, ';\n')
+    .split(/\n+/)
+    .map(unit => unit.trim())
+    .filter(unit => unit.length > 10);
+}
+
+function extractCodeBlocks(text) {
+  const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const codeLines = lines.filter(line =>
+    /#include|using namespace|int main|void \w+\s*\(|\breturn\s+[^.]+;|<\w+[^>]*>|[.#][\w-]+\s*\{|[a-z-]+\s*:\s*[^;]+;/.test(line)
+  );
+
+  return codeLines.length ? [codeLines.join('\n')] : [];
+}
+
+function getReferences(text) {
+  const lower = text.toLowerCase();
+  const references = [];
+  if (/\bc\+\+|recursion|function|parameter|return value/.test(lower)) {
+    references.push(
+      { label: 'cppreference: Functions', url: 'https://en.cppreference.com/w/cpp/language/functions' },
+      { label: 'cppreference: Recursion', url: 'https://en.cppreference.com/w/cpp/language/functions' }
+    );
+  }
+  if (/\bhtml|element|tag|markup/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: HTML', url: 'https://developer.mozilla.org/en-US/docs/Web/HTML' });
+  }
+  if (/\bcss|selector|property|style/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: CSS', url: 'https://developer.mozilla.org/en-US/docs/Web/CSS' });
+  }
+  if (/\bjavascript|function|array|dom/.test(lower)) {
+    references.push({ label: 'MDN Web Docs: JavaScript', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript' });
+  }
+
+  if (references.length < 3) {
+    references.push(
+      { label: 'Khan Academy: Study and learning resources', url: 'https://www.khanacademy.org/' },
+      { label: 'Wikipedia: Search the lesson topic', url: `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(text.split(/\s+/).slice(0, 6).join(' '))}` }
+    );
+  }
+
+  return references.slice(0, 5);
+}
 
 // ─── Utilities ───────────────────────────────
 function splitSentences(text) {
