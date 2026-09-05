@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GeraBananini Review Station 🍌</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ===== SIDEBAR NAV ===== -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">🍌</span>
+      <div class="brand-text">
+        <span class="brand-name">GeraBananini</span>
+        <span class="brand-sub">Review Station</span>
+      </div>
+    </div>
+
+    <ul class="nav-links">
+      <li>
+        <a href="#" class="nav-link active" data-page="home">
+          <span class="nav-icon">🏠</span>
+          <span>Home</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="upload">
+          <span class="nav-icon">📄</span>
+          <span>Upload & Review</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="quiz">
+          <span class="nav-icon">🧠</span>
+          <span>Quiz Mode</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="history">
+          <span class="nav-icon">📚</span>
+          <span>My Sessions</span>
+        </a>
+      </li>
+      <li>
+        <a href="#" class="nav-link" data-page="about">
+          <span class="nav-icon">ℹ️</span>
+          <span>About</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="nav-footer">
+      <button class="suggest-btn" id="suggestBtn">
+        <span class="suggest-icon">💡</span>
+        <span>Suggest a Feature</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile topbar -->
+  <header class="topbar">
+    <button class="hamburger" id="hamburger" aria-label="Toggle menu">☰</button>
+    <span class="topbar-title">🍌 GeraBananini</span>
+  </header>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="main-content" id="mainContent">
+
+    <!-- HOME PAGE -->
+    <section class="page active" id="page-home">
+      <div class="hero">
+        <div class="hero-text">
+          <h1>Study Smarter,<br /><span class="highlight">Not Harder.</span></h1>
+          <p>Upload any document and GeraBananini instantly generates a smart review summary and custom quiz. No more staring at textbooks—let the banana do the work. 🍌</p>
+          <button class="btn btn-primary" onclick="navigateTo('upload')">Start Reviewing →</button>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-card">
+            <div class="hc-label">What you get</div>
+            <div class="hc-item">📝 Smart Summary</div>
+            <div class="hc-item">❓ Auto-generated Quiz</div>
+            <div class="hc-item">✅ Instant Feedback</div>
+            <div class="hc-item">📊 Score Tracking</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="how-section">
+        <h2>How it works</h2>
+        <div class="steps-row">
+          <div class="step-card">
+            <div class="step-num">1</div>
+            <div class="step-title">Upload your file</div>
+            <p>PDF or TXT — drag and drop or browse. Your content stays local.</p>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step-card">
+            <div class="step-num">2</div>
+            <div class="step-title">Read the review</div>
+            <p>GeraBananini summarizes key points so you can refresh fast.</p>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step-card">
+            <div class="step-num">3</div>
+            <div class="step-title">Take the quiz</div>
+            <p>Answer questions generated directly from your material and see your score.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- UPLOAD & REVIEW PAGE -->
+    <section class="page" id="page-upload">
+      <div class="page-header">
+        <h1>Upload & Review</h1>
+        <p>Drop in your file and we'll break it down for you.</p>
+      </div>
+
+      <div class="upload-zone" id="uploadZone">
+        <div class="upload-inner" id="uploadInner">
+          <div class="upload-icon">📂</div>
+          <p class="upload-label">Drag & drop your file here</p>
+          <p class="upload-sub">Supports <strong>.txt</strong>, <strong>.pdf</strong>, and lesson images</p>
+          <label class="btn btn-outline upload-label-btn">
+            Browse File
+            <input type="file" id="fileInput" accept=".txt,.pdf,image/*" hidden />
+          </label>
+        </div>
+      </div>
+
+      <div class="file-info" id="fileInfo" style="display:none;">
+        <span id="fileName">—</span>
+        <button class="btn btn-sm btn-ghost" id="clearFile">✕ Remove</button>
+      </div>
+
+      <div class="content-area" id="contentArea" style="display:none;">
+        <div class="content-raw-wrap">
+          <h3>Raw Content Preview</h3>
+          <p id="contentStats" class="content-stats"></p>
+          <div class="content-raw" id="contentRaw"></div>
+        </div>
+        <button class="btn btn-primary" id="generateBtn">🍌 Generate Review & Quiz</button>
+      </div>
+
+      <div class="review-section" id="reviewSection" style="display:none;">
+        <div class="review-card">
+          <h2>📝 Review Summary</h2>
+          <div id="reviewText" class="review-body"></div>
+        </div>
+        <div class="action-row">
+          <button class="btn btn-accent" id="goToQuizBtn">🧠 Take the Quiz →</button>
+        </div>
+      </div>
+
+      <div class="sources-section" id="sourcesSection" style="display:none;">
+        <div class="review-card">
+          <h2>🌐 Related Sources</h2>
+          <p class="sources-note">Optional context from Wikipedia's free public API.</p>
+          <div id="sourcesList"></div>
+        </div>
+      </div>
+
+      <div class="loading-overlay" id="loadingOverlay" style="display:none;">
+        <div class="loading-box">
+          <div class="banana-spin">🍌</div>
+          <p>Crunching your document...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUIZ PAGE -->
+    <section class="page" id="page-quiz">
+      <div class="page-header">
+        <h1>Quiz Mode</h1>
+        <p>Test what you know. No peeking. 👀</p>
+      </div>
+
+      <div class="quiz-placeholder" id="quizPlaceholder">
+        <div class="placeholder-icon">🧠</div>
+        <p>No quiz loaded yet.</p>
+        <button class="btn btn-primary" onclick="navigateTo('upload')">Upload a file first →</button>
+      </div>
+
+      <div class="quiz-container" id="quizContainer" style="display:none;">
+        <div class="quiz-meta">
+          <span id="quizProgress">Question 1 of 5</span>
+          <span class="score-chip" id="scoreDisplay">Score: 0</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+
+        <div class="question-card" id="questionCard">
+          <p class="question-text" id="questionText"></p>
+          <div class="options-grid" id="optionsGrid"></div>
+          <div class="feedback" id="feedback" style="display:none;"></div>
+          <button class="btn btn-primary" id="nextBtn" style="display:none;">Next →</button>
+        </div>
+
+        <div class="quiz-result" id="quizResult" style="display:none;">
+          <div class="result-icon" id="resultIcon"></div>
+          <h2 id="resultTitle"></h2>
+          <p id="resultMessage"></p>
+          <div class="result-score" id="resultScore"></div>
+          <div class="result-actions">
+            <button class="btn btn-primary" id="retryBtn">🔄 Try Again</button>
+            <button class="btn btn-outline" onclick="navigateTo('upload')">📄 New File</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY PAGE -->
+    <section class="page" id="page-history">
+      <div class="page-header">
+        <h1>My Sessions</h1>
+        <p>Your past reviews and quiz scores.</p>
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div id="historyEmpty" class="placeholder-box" style="display:none;">
+        <div class="placeholder-icon">📭</div>
+        <p>No sessions yet. Upload a file to get started!</p>
+        <button class="btn btn-primary" onclick="navigateTo('upload')">Upload a File →</button>
+      </div>
+    </section>
+
+    <!-- ABOUT PAGE -->
+    <section class="page" id="page-about">
+      <div class="page-header">
+        <h1>About GeraBananini</h1>
+      </div>
+      <div class="about-content">
+        <div class="about-card">
+          <h2>🍌 What is GeraBananini?</h2>
+          <p>GeraBananini Review Station is your offline-friendly, browser-based study companion. Upload a text document, get a concise review, and challenge yourself with an auto-generated quiz — all without sending your data anywhere.</p>
+        </div>
+        <div class="about-card">
+          <h2>🛠️ How it generates quizzes</h2>
+          <p>The app reads your document, extracts key sentences and concepts, and builds multiple-choice questions on the fly using in-browser JavaScript. No AI API calls needed — everything runs locally in your browser.</p>
+        </div>
+        <div class="about-card">
+          <h2>🔒 Privacy</h2>
+          <p>Your files never leave your device. All processing happens in the browser. Session history is saved only to your browser's local storage.</p>
+        </div>
+        <div class="about-card">
+          <h2>📬 Built by</h2>
+          <p>Crafted with curiosity and a love for bananas. Open source and free to use. Want to contribute? Check the repo and open a PR!</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== SUGGESTION MODAL ===== -->
+  <div class="modal-overlay" id="modalOverlay" style="display:none;">
+    <div class="modal">
+      <button class="modal-close" id="modalClose">✕</button>
+      <h2>💡 Suggest a Feature</h2>
+      <p>Got an idea or spotted a bug? Write it here and copy it to share with the developer!</p>
+
+      <div class="suggest-chips">
+        <span class="chip" data-val="Feature idea: ">✨ Feature Idea</span>
+        <span class="chip" data-val="Bug report: ">🐛 Bug Report</span>
+        <span class="chip" data-val="UI improvement: ">🎨 UI Improvement</span>
+        <span class="chip" data-val="Other: ">💬 Other</span>
+      </div>
+
+      <textarea id="suggestionText" class="suggest-textarea" placeholder="e.g. Add flashcard mode, dark theme, support for .docx files..."></textarea>
+
+      <div class="suggest-ideas">
+        <p class="ideas-label">💭 Ideas from the dev team:</p>
+        <ul>
+          <li>🌙 Dark / light theme toggle</li>
+          <li>🔤 Highlight key terms in the review</li>
+          <li>🃏 Flashcard mode (flip cards)</li>
+          <li>📊 Score history chart over time</li>
+          <li>📤 Export quiz as PDF</li>
+          <li>🌐 Multilingual support (Filipino, etc.)</li>
+          <li>📱 Better mobile layout optimization</li>
+        </ul>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="copySuggestBtn">📋 Copy Suggestion</button>
+        <button class="btn btn-ghost" id="closeSuggestBtn">Close</button>
+      </div>
+      <div class="copy-confirm" id="copyConfirm" style="display:none;">✅ Copied to clipboard!</div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
