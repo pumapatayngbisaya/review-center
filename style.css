@@ -214,6 +214,30 @@ body {
   transition: margin-left .3s ease;
 }
 
+.content-area,
+.content-raw-wrap,
+.review-card,
+.sources-section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.content-raw-wrap,
+.review-card {
+  overflow: hidden;
+}
+
+.content-raw,
+.review-body {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.content-raw {
+  overflow-x: auto;
+}
+
 .sidebar-collapsed .main-content {
   margin-left: 72px;
 }
@@ -524,6 +548,7 @@ body {
   overflow-x: auto;
   line-height: 1.55;
   margin: 12px 0 18px;
+  max-width: 100%;
 }
 
 .review-body code {
