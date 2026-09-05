@@ -540,6 +540,14 @@ body {
   margin-bottom: 6px;
 }
 
+.summary-points p {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  background: #F1F5F9;
+  border-left: 4px solid var(--yellow);
+  border-radius: 8px;
+}
+
 .review-details p {
   margin: 0 0 16px;
 }
