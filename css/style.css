@@ -540,6 +540,10 @@ body {
   margin-bottom: 6px;
 }
 
+.review-details p {
+  margin: 0 0 16px;
+}
+
 .review-body pre {
   background: var(--navy);
   color: #F8F9FA;
