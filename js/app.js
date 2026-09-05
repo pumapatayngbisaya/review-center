@@ -46,11 +46,22 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 
-// Mobile hamburger
+// Navigation controls
+const sidebarToggle = document.getElementById('sidebarToggle');
 document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('sidebar').classList.toggle('open');
 });
 
+sidebarToggle.addEventListener('click', () => {
+  document.body.classList.toggle('sidebar-collapsed');
+  sidebarToggle.textContent = document.body.classList.contains('sidebar-collapsed') ? '›' : '‹';
+  sidebarToggle.setAttribute(
+    'aria-label',
+    document.body.classList.contains('sidebar-collapsed')
+      ? 'Expand navigation'
+      : 'Collapse navigation'
+  );
+});
 
 // ─── Suggestion Modal ────────────────────────
 const suggestBtn = document.getElementById('suggestBtn');
@@ -60,6 +71,7 @@ const closeSuggestBtn = document.getElementById('closeSuggestBtn');
 const copySuggestBtn = document.getElementById('copySuggestBtn');
 const suggestionText = document.getElementById('suggestionText');
 const copyConfirm = document.getElementById('copyConfirm');
+const newUploadBtn = document.getElementById('newUploadBtn');
 
 
 suggestBtn.addEventListener('click', () => {
@@ -110,31 +122,15 @@ copySuggestBtn.addEventListener('click', () => {
     return;
   }
 
-  navigator.clipboard.writeText(text).then(() => {
-    copyConfirm.style.display = 'block';
-
-    setTimeout(() => {
-      copyConfirm.style.display = 'none';
-    }, 3000);
-
-  }).catch(() => {
-    // Fallback for older browsers
-    const ta = document.createElement('textarea');
-
-    ta.value = text;
-    document.body.appendChild(ta);
-
-    ta.select();
-    document.execCommand('copy');
-
-    document.body.removeChild(ta);
-
-    copyConfirm.style.display = 'block';
-
-    setTimeout(() => {
-      copyConfirm.style.display = 'none';
-    }, 3000);
-  });
+  const subject = encodeURIComponent('GeraBananini Feature Suggestion');
+  const body = encodeURIComponent(text);
+  window.open(
+    `https://mail.google.com/mail/?view=cm&fs=1&to=johngeraban30@gmail.com&su=${subject}&body=${body}`,
+    '_blank',
+    'noopener,noreferrer'
+  );
+  copyConfirm.textContent = '✅ Your email app is opening.';
+  copyConfirm.style.display = 'block';
 });
 
 
@@ -475,7 +471,20 @@ async function loadRelatedSources(keywords) {
   sourcesList.textContent = 'Finding related sources...';
 
   try {
-    const query = keywords.slice(0, 3).join(' ');
+      const sourceText = state.rawText.toLowerCase();
+      const subjectHints = [];
+
+      if (/\bc\+\+|cpp\b/.test(sourceText)) subjectHints.push('C++');
+      if (/\bhtml\b/.test(sourceText)) subjectHints.push('HTML');
+      if (/\bcss\b/.test(sourceText)) subjectHints.push('CSS');
+      if (/\bjavascript|java script\b/.test(sourceText)) subjectHints.push('JavaScript');
+      if (/\brecursion|recursive\b/.test(sourceText)) subjectHints.push('recursion');
+      if (/\bfunction|parameter|return value\b/.test(sourceText)) subjectHints.push('functions');
+
+      const query = [...subjectHints, ...keywords.slice(0, 4)]
+        .filter(Boolean)
+        .join(' ')
+        .slice(0, 180);
     const response = await fetch(
       `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json&origin=*`
     );
@@ -731,6 +740,11 @@ document
   .addEventListener('click', () => {
     navigateTo('quiz');
   });
+
+newUploadBtn.addEventListener('click', () => {
+  resetUpload();
+  navigateTo('upload');
+});
 
 
 // ─── Quiz Generation ─────────────────────────
@@ -1340,7 +1354,10 @@ function saveSession() {
   const entry = {
     name: state.fileName,
     date: new Date().toLocaleString(),
-    score: null,
+    score: existing >= 0 ? sessions[existing].score : null,
+    rawText: state.rawText,
+    reviewData: state.reviewData,
+    quizData: state.quizData,
 
     keyTerms:
       state.reviewData
@@ -1358,12 +1375,15 @@ function saveSession() {
   }
 
 
-  localStorage.setItem(
-    'gera_sessions',
-    JSON.stringify(
-      sessions.slice(0, 20)
-    )
-  );
+  try {
+    localStorage.setItem(
+      'gera_sessions',
+      JSON.stringify(sessions.slice(0, 20))
+    );
+  } catch (error) {
+    console.error('Could not save study session:', error);
+    alert('⚠️ This lesson is too large to save in browser history. You can still use the current review.');
+  }
 }
 
 
@@ -1385,10 +1405,7 @@ function updateSessionScore(
   if (idx >= 0) {
     sessions[idx].score = pct;
 
-    localStorage.setItem(
-      'gera_sessions',
-      JSON.stringify(sessions)
-    );
+    localStorage.setItem('gera_sessions', JSON.stringify(sessions));
   }
 }
 
@@ -1471,6 +1488,10 @@ function renderHistory() {
 
       </div>
 
+      <div class="history-actions">
+        <button class="btn btn-sm btn-primary session-open">Open</button>
+        <button class="btn btn-sm btn-ghost session-delete">Delete</button>
+      </div>
       <span class="history-score">
         ${
           s.score !== null
@@ -1480,9 +1501,34 @@ function renderHistory() {
       </span>
     `;
 
-
+    el.querySelector('.session-open').addEventListener('click', () => openSession(s));
+    el.querySelector('.session-delete').addEventListener('click', () => {
+        const remaining = getSessions().filter(session => session !== s);
+      localStorage.setItem('gera_sessions', JSON.stringify(remaining));
+      renderHistory();
+    });
     list.appendChild(el);
   });
+}
+
+function openSession(session) {
+  if (!session.rawText || !session.reviewData) {
+    alert('This older session does not contain a saved review. Please upload the file again.');
+    return;
+  }
+
+  state.fileName = session.name;
+  state.rawText = session.rawText;
+  state.reviewData = session.reviewData && session.reviewData.units
+    ? session.reviewData
+    : generateReview(session.rawText);
+  state.quizData = session.quizData || generateQuiz(session.rawText);
+  fileNameEl.textContent = '📄 ' + session.name;
+  fileInfo.style.display = 'flex';
+  showContent();
+  renderReview(state.reviewData);
+  loadRelatedSources(state.reviewData.topWords);
+  navigateTo('upload');
 }
 
 
