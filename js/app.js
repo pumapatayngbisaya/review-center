@@ -8,6 +8,7 @@
 const state = {
   rawText: '',
   fileName: '',
+  files: [],
   reviewData: null,
   quizData: null,
   currentQuestion: 0,
@@ -166,18 +167,12 @@ uploadZone.addEventListener('drop', e => {
   e.preventDefault();
   uploadZone.classList.remove('drag-over');
 
-  const file = e.dataTransfer.files[0];
-
-  if (file) {
-    handleFile(file);
-  }
+  handleFiles([...e.dataTransfer.files]);
 });
 
-
 fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) {
-    handleFile(fileInput.files[0]);
-  }
+  handleFiles([...fileInput.files]);
+  fileInput.value = '';
 });
 
 
@@ -186,7 +181,51 @@ clearFileBtn.addEventListener('click', () => {
 });
 
 
-function handleFile(file) {
+async function handleFiles(files) {
+  const validFiles = files.filter(isSupportedFile);
+  if (!validFiles.length) return;
+
+  state.rawText = '';
+  state.reviewData = null;
+  state.quizData = null;
+  const existingKeys = new Set(
+    state.files.map(entry => `${entry.file.name}:${entry.file.size}:${entry.file.lastModified}`)
+  );
+  const newFiles = validFiles.filter(file =>
+    !existingKeys.has(`${file.name}:${file.size}:${file.lastModified}`)
+  );
+  if (!newFiles.length) return;
+  state.fileName = state.files.map(entry => entry.file.name).join(', ');
+  reviewSection.style.display = 'none';
+  fileInfo.style.display = 'flex';
+
+  for (let index = 0; index < newFiles.length; index++) {
+    const file = newFiles[index];
+    loadingOverlay.style.display = 'flex';
+    loadingOverlay.querySelector('p').textContent =
+      `Reading file ${index + 1} of ${newFiles.length}: ${file.name}`;
+    renderFileList();
+
+    try {
+      const text = await readFileContent(file);
+      state.files.push({ file, text });
+      state.fileName = state.files.map(entry => entry.file.name).join(', ');
+      state.rawText = state.files
+        .map(entry => `--- FILE: ${entry.file.name} ---\n${entry.text}`)
+        .join('\n\n');
+      renderFileList();
+    } catch (error) {
+      console.error(`File reading error for ${file.name}:`, error);
+      alert(`⚠️ Could not read ${file.name}.\n\n${error.message || 'Unsupported or unreadable file.'}`);
+    }
+  }
+
+  loadingOverlay.style.display = 'none';
+  loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
+  if (state.rawText.trim()) showContent();
+}
+
+function isSupportedFile(file) {
   const allowed = [
     'text/plain',
     'application/pdf',
@@ -199,108 +238,79 @@ function handleFile(file) {
 
   if (!allowed.includes(file.type) && !['txt', 'pdf', 'docx', 'pptx'].includes(ext) && !isImage) {
     alert('Please upload a .txt, .pdf, .docx, .pptx, or image file.');
-    return;
+    return false;
   }
+  return true;
+}
 
-  state.fileName = file.name;
-
-  fileNameEl.textContent = '📄 ' + file.name;
-  fileInfo.style.display = 'flex';
-  reviewSection.style.display = 'none';
-
+function readFileContent(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const isImage = file.type.startsWith('image/');
+  const isOfficeFile = ext === 'docx' || ext === 'pptx';
   if (isImage) {
-    readImage(file);
+    return readImage(file);
   } else if (file.type === 'application/pdf' || ext === 'pdf') {
-    readPDF(file);
+    return readPDF(file);
   } else if (isOfficeFile) {
-    readOfficeFile(file, ext);
+    return readOfficeFile(file, ext);
   } else {
-    readText(file);
+    return readText(file);
   }
 }
 
 // ─── Image Reading (OCR) ──────────────────────
 async function readImage(file) {
   if (typeof Tesseract === 'undefined') {
-    alert('⚠️ OCR is unavailable because the OCR library could not be loaded.');
-    resetUpload();
-    return;
+    throw new Error('OCR is unavailable because the OCR library could not be loaded.');
   }
 
-  loadingOverlay.style.display = 'flex';
-
-  try {
-    const result = await Tesseract.recognize(file, 'eng', {
-      logger: message => {
-        if (message.status === 'recognizing text') {
-          const progress = Math.round(message.progress * 100);
-          loadingOverlay.querySelector('p').textContent =
-            `Reading lesson image... ${progress}%`;
-        }
+  const result = await Tesseract.recognize(file, 'eng', {
+    logger: message => {
+      if (message.status === 'recognizing text') {
+        const progress = Math.round(message.progress * 100);
+        loadingOverlay.querySelector('p').textContent =
+          `Reading lesson image... ${progress}%`;
       }
-    });
-
-    state.rawText = result.data.text.trim();
-    if (!state.rawText) {
-      throw new Error('No readable text was found in the image.');
     }
+  });
 
-    showContent();
-  } catch (error) {
-    console.error('Image reading error:', error);
-    alert('⚠️ Could not read text from this image. Use a clearer image with selectable-looking text.');
-    resetUpload();
-  } finally {
-    loadingOverlay.style.display = 'none';
-    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
-  }
+  const text = result.data.text.trim();
+  if (!text) throw new Error('No readable text was found in the image.');
+  return text;
 }
 
 
 // ─── TXT Reading ─────────────────────────────
 function readText(file) {
-  const reader = new FileReader();
-
-  reader.onload = e => {
-    if (typeof e.target.result !== 'string') {
-      alert('⚠️ Could not read this text file.');
-      resetUpload();
-      return;
-    }
-
-    state.rawText = e.target.result;
-    showContent();
-  };
-
-  reader.onerror = () => {
-    alert('⚠️ Could not read this text file. Please try again.');
-    resetUpload();
-  };
-
-  reader.readAsText(file);
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      if (typeof e.target.result !== 'string') {
+        reject(new Error('Could not read this text file.'));
+        return;
+      }
+      resolve(e.target.result);
+    };
+    reader.onerror = () => reject(new Error('Could not read this text file.'));
+    reader.readAsText(file);
+  });
 }
 
 // ─── DOCX/PPTX Reading ────────────────────────
 async function readOfficeFile(file, extension) {
-  loadingOverlay.style.display = 'flex';
   loadingOverlay.querySelector('p').textContent = `Reading ${extension.toUpperCase()} lesson...`;
+  if (extension === 'docx') {
+    if (typeof mammoth === 'undefined') throw new Error('DOCX reader is unavailable.');
 
-  try {
-    if (extension === 'docx') {
-      if (typeof mammoth === 'undefined') {
-        throw new Error('DOCX reader is unavailable.');
-      }
+    const result = await mammoth.extractRawText({
+      arrayBuffer: await file.arrayBuffer()
+    });
+    if (!result.value.trim()) throw new Error('No readable text was found.');
+    return result.value.trim();
+  }
 
-      const result = await mammoth.extractRawText({
-        arrayBuffer: await file.arrayBuffer()
-      });
-      state.rawText = result.value.trim();
-    } else {
-      if (typeof JSZip === 'undefined') {
-        throw new Error('PPTX reader is unavailable.');
-      }
-
-      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  if (typeof JSZip === 'undefined') throw new Error('PPTX reader is unavailable.');
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
       const slideNames = Object.keys(zip.files)
         .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
         .sort((a, b) => {
@@ -320,21 +330,9 @@ async function readOfficeFile(file, extension) {
         if (text) slideTexts.push(text);
       }
 
-      state.rawText = slideTexts.join('\n\n').trim();
-    }
-
-    if (!state.rawText) {
-      throw new Error('No readable text was found.');
-    }
-    showContent();
-  } catch (error) {
-    console.error(`${extension.toUpperCase()} reading error:`, error);
-    alert(`⚠️ Could not read text from this ${extension.toUpperCase()} file. It may contain only images or unsupported formatting.`);
-    resetUpload();
-  } finally {
-    loadingOverlay.style.display = 'none';
-    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
-  }
+  const text = slideTexts.join('\n\n').trim();
+  if (!text) throw new Error('No readable text was found.');
+  return text;
 }
 
 
@@ -349,13 +347,7 @@ async function readPDF(file) {
 
     // Make sure PDF.js is loaded
     if (typeof pdfjsLib === 'undefined') {
-      alert(
-        '⚠️ PDF.js is not loaded. Please make sure the PDF.js script ' +
-        'is included before app.js in your HTML.'
-      );
-
-      resetUpload();
-      return;
+      throw new Error('PDF.js is not loaded.');
     }
 
     // Load the PDF
@@ -403,20 +395,13 @@ async function readPDF(file) {
       throw new Error('No readable text was found in this PDF, even after OCR.');
     }
 
-    state.rawText = extractedText;
-    showContent();
+    return extractedText;
 
   } catch (error) {
     console.error('PDF reading error:', error);
-
-    alert(
-      `⚠️ Could not read this PDF.\n\n${error.message || 'Please make sure the file is valid.'}`
-    );
-
-    resetUpload();
+    throw error;
   } finally {
-    loadingOverlay.style.display = 'none';
-    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
+    // The multi-file controller owns the loading state.
   }
 }
 
@@ -583,6 +568,7 @@ function showContent() {
 function resetUpload() {
   state.rawText = '';
   state.fileName = '';
+  state.files = [];
   state.reviewData = null;
   state.quizData = null;
 
@@ -594,6 +580,35 @@ function resetUpload() {
   reviewSection.style.display = 'none';
   sourcesSection.style.display = 'none';
   sourcesList.textContent = '';
+  renderFileList();
+}
+
+function renderFileList() {
+  fileNameEl.innerHTML = state.files.length
+    ? state.files.map((entry, index) => `
+        <span class="uploaded-file">
+          📄 ${escHtml(entry.file.name)}
+          <button type="button" class="btn btn-sm btn-ghost remove-uploaded-file" data-index="${index}">✕</button>
+        </span>
+      `).join('')
+    : '—';
+
+  fileNameEl.querySelectorAll('.remove-uploaded-file').forEach(button => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.index);
+      state.files.splice(index, 1);
+      state.fileName = state.files.map(entry => entry.file.name).join(', ');
+      state.rawText = state.files
+        .map(entry => `--- FILE: ${entry.file.name} ---\n${entry.text}`)
+        .join('\n\n');
+      renderFileList();
+      if (state.rawText.trim()) {
+        showContent();
+      } else {
+        resetUpload();
+      }
+    });
+  });
 }
 
 
