@@ -442,6 +442,14 @@ body {
   box-shadow: var(--shadow);
 }
 
+.uploaded-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  margin-bottom: 4px;
+}
+
 .content-raw-wrap {
   background: var(--white);
   border-radius: var(--radius);
