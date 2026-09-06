@@ -1626,7 +1626,7 @@ function renderHistory() {
   empty.style.display = 'none';
 
 
-  sessions.forEach(s => {
+  sessions.forEach((s, sessionIndex) => {
     const el =
       document.createElement(
         'div'
@@ -1672,8 +1672,8 @@ function renderHistory() {
 
     el.querySelector('.session-open').addEventListener('click', () => openSession(s));
     el.querySelector('.session-delete').addEventListener('click', () => {
-        const remaining = getSessions().filter(session => session !== s);
-      localStorage.setItem('gera_sessions', JSON.stringify(remaining));
+        const currentSessions = getSessions();       currentSessions.splice(sessionIndex, 1);
+      localStorage.setItem('gera_sessions', JSON.stringify(currentSessions));
       renderHistory();
     });
     list.appendChild(el);
