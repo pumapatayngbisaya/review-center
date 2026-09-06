@@ -148,7 +148,7 @@ const generateBtn = document.getElementById('generateBtn');
 const reviewSection = document.getElementById('reviewSection');
 const sourcesSection = document.getElementById('sourcesSection');
 const sourcesList = document.getElementById('sourcesList');
-const loadingOverlay = document.getElementById('loadingOverlay');
+const loadingOverlay = document.getElementById('loadingOverlay'); const anthropicApiKeyInput = document.getElementById('anthropicApiKey'); const saveAnthropicApiKeyBtn = document.getElementById('saveAnthropicApiKey'); const clearAnthropicApiKeyBtn = document.getElementById('clearAnthropicApiKey'); const anthropicKeyStatus = document.getElementById('anthropicKeyStatus'); const ANTHROPIC_API_KEY_STORAGE = 'gera_anthropic_api_key'; function getAnthropicApiKey() { return localStorage.getItem(ANTHROPIC_API_KEY_STORAGE) || ''; } function updateAnthropicKeyStatus(message) { if (anthropicKeyStatus) anthropicKeyStatus.textContent = message; } if (anthropicApiKeyInput) { anthropicApiKeyInput.value = getAnthropicApiKey(); updateAnthropicKeyStatus(getAnthropicApiKey() ? 'Key is stored locally in this browser.' : 'AI fallback is disabled until you add a key.'); } if (saveAnthropicApiKeyBtn) saveAnthropicApiKeyBtn.addEventListener('click', () => { const key = anthropicApiKeyInput.value.trim(); if (!key) { localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE); updateAnthropicKeyStatus('AI fallback is disabled.'); return; } localStorage.setItem(ANTHROPIC_API_KEY_STORAGE, key); updateAnthropicKeyStatus('Key saved locally. It is never committed to the repository.'); }); if (clearAnthropicApiKeyBtn) clearAnthropicApiKeyBtn.addEventListener('click', () => { localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE); anthropicApiKeyInput.value = ''; updateAnthropicKeyStatus('AI fallback is disabled.'); }); const anthropicApiKeyInput = document.getElementById('anthropicApiKey'); const saveAnthropicApiKeyBtn = document.getElementById('saveAnthropicApiKey'); const clearAnthropicApiKeyBtn = document.getElementById('clearAnthropicApiKey'); const anthropicKeyStatus = document.getElementById('anthropicKeyStatus'); const ANTHROPIC_API_KEY_STORAGE = 'gera_anthropic_api_key';  function getAnthropicApiKey() { return localStorage.getItem(ANTHROPIC_API_KEY_STORAGE) || ''; } function updateAnthropicKeyStatus(message) { if (anthropicKeyStatus) anthropicKeyStatus.textContent = message; } if (anthropicApiKeyInput) { anthropicApiKeyInput.value = getAnthropicApiKey(); updateAnthropicKeyStatus(getAnthropicApiKey() ? 'Key is stored locally in this browser.' : 'AI fallback is disabled until you add a key.'); } if (saveAnthropicApiKeyBtn) saveAnthropicApiKeyBtn.addEventListener('click', () => { const key = anthropicApiKeyInput.value.trim(); if (!key) { localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE); updateAnthropicKeyStatus('AI fallback is disabled.'); return; } localStorage.setItem(ANTHROPIC_API_KEY_STORAGE, key); updateAnthropicKeyStatus('Key saved locally. It is never committed to the repository.'); }); if (clearAnthropicApiKeyBtn) clearAnthropicApiKeyBtn.addEventListener('click', () => { localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE); anthropicApiKeyInput.value = ''; updateAnthropicKeyStatus('AI fallback is disabled.'); });
 
 
 // Drag events
@@ -456,8 +456,8 @@ function extractPDFPageText(textContent) {
     .join('\n');
 }
 
-async function extractPDFTextWithOCR(pdf) {
-  const pages = new Array(pdf.numPages).fill('');
+async function extractPDFTextWithOCR(pdf, file) {
+  const pages = new Array(pdf.numPages).fill('');   const aiAssistedPages = [];
   const workerCount = Math.min(3, pdf.numPages);
   let completedPages = 0;
   let nextPage = 1;
@@ -485,7 +485,7 @@ async function extractPDFTextWithOCR(pdf) {
       viewport
     }).promise;
 
-    const result = await worker.recognize(canvas);
+    const result = await worker.recognize(canvas);     const ocrText = cleanExtractedText(result.data.text || '');     const aiText = await getAIVisionFallback(canvas, ocrText, pageNum, file);     pages[pageNum - 1] = aiText || ocrText;     if (aiText) aiAssistedPages.push(pageNum);
     pages[pageNum - 1] = cleanExtractedText(result.data.text || '');
     completedPages += 1;
     loadingOverlay.querySelector('p').textContent =
