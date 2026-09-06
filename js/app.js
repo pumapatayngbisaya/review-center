@@ -1705,11 +1705,32 @@ function filterAcademicContent(text) {
 }
 
 function splitAcademicUnits(text) {
+  const BULLET_RE = /^(?:[•·]|[-*]|\d+\.\s|\(?[a-zA-Z]\)\s)/;
+
   return text
-    // Keep punctuation inside the paragraph; only an actual blank line starts a new unit.
     .replace(/\r\n/g, '\n')
-    .split(/\n\s*\n+/)
-    .map(unit => unit.replace(/\s*\n\s*/g, ' ').trim())
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .reduce((units, line) => {
+      const isBullet = BULLET_RE.test(line);
+      const cleanLine = line.replace(BULLET_RE, '').trim();
+      const last = units[units.length - 1];
+
+      if (isBullet || !last) {
+        units.push(cleanLine);
+        return units;
+      }
+
+      if (/[.?!]$/.test(last) || last.length > 220) {
+        units.push(cleanLine);
+      } else {
+        units[units.length - 1] = `${last} ${cleanLine}`;
+      }
+
+      return units;
+    }, [])
+    .map(unit => unit.trim())
     .filter(unit => unit.length > 10);
 }
 
