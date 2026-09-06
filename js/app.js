@@ -392,7 +392,13 @@ async function readPDF(file) {
         throw new Error('OCR is unavailable because the OCR library could not be loaded.');
       }
 
-      extractedText = await extractPDFTextWithOCR(pdf);
+      const cacheKey = getPDFOCRCacheKey(file);
+      const cachedText = getCachedPDFOCR(cacheKey);
+      extractedText = cachedText || await extractPDFTextWithOCR(pdf);
+
+      if (!cachedText) {
+        cachePDFOCR(cacheKey, extractedText);
+      }
     }
 
     if (!extractedText.trim()) {
@@ -417,14 +423,19 @@ async function readPDF(file) {
 }
 
 async function extractPDFTextWithOCR(pdf) {
-  const pages = [];
+  const pages = new Array(pdf.numPages).fill('');
+  const workerCount = Math.min(3, pdf.numPages);
+  let completedPages = 0;
+  let nextPage = 1;
+  const workers = await Promise.all(
+    Array.from({ length: workerCount }, () =>
+      Tesseract.createWorker('eng', 1)
+    )
+  );
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    loadingOverlay.querySelector('p').textContent =
-      `Scanning PDF page ${pageNum} of ${pdf.numPages} with OCR...`;
-
+  async function scanPage(pageNum, worker) {
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 2 });
+    const viewport = page.getViewport({ scale: 1.5 });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
 
@@ -440,21 +451,55 @@ async function extractPDFTextWithOCR(pdf) {
       viewport
     }).promise;
 
-    const result = await Tesseract.recognize(canvas, 'eng', {
-      logger: message => {
-        if (message.status === 'recognizing text') {
-          const progress = Math.round(message.progress * 100);
-          loadingOverlay.querySelector('p').textContent =
-            `Scanning PDF page ${pageNum} of ${pdf.numPages} with OCR... ${progress}%`;
-        }
-      }
-    });
-
-    const pageText = cleanExtractedText(result.data.text || '');
-    if (pageText) pages.push(pageText);
+    const result = await worker.recognize(canvas);
+    pages[pageNum - 1] = cleanExtractedText(result.data.text || '');
+    completedPages += 1;
+    loadingOverlay.querySelector('p').textContent =
+      `Scanning PDF pages with OCR... ${completedPages} of ${pdf.numPages}`;
   }
 
-  return pages.join('\n\n').trim();
+  try {
+    await Promise.all(
+      workers.map(async worker => {
+        while (true) {
+          const pageNum = nextPage;
+          nextPage += 1;
+          if (pageNum > pdf.numPages) return;
+          await scanPage(pageNum, worker);
+        }
+      })
+    );
+  } finally {
+    await Promise.all(workers.map(worker => worker.terminate()));
+  }
+
+  return pages.filter(Boolean).join('\n\n').trim();
+}
+
+function getPDFOCRCacheKey(file) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function getCachedPDFOCR(cacheKey) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('gera_pdf_ocr_cache') || '{}');
+    return typeof cache[cacheKey] === 'string' ? cache[cacheKey] : '';
+  } catch (error) {
+    console.warn('Could not read PDF OCR cache:', error);
+    return '';
+  }
+}
+
+function cachePDFOCR(cacheKey, text) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('gera_pdf_ocr_cache') || '{}');
+    cache[cacheKey] = text;
+    const keys = Object.keys(cache);
+    keys.slice(0, Math.max(0, keys.length - 5)).forEach(key => delete cache[key]);
+    localStorage.setItem('gera_pdf_ocr_cache', JSON.stringify(cache));
+  } catch (error) {
+    console.warn('Could not save PDF OCR cache:', error);
+  }
 }
 
 
