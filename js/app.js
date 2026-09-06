@@ -338,8 +338,11 @@ async function readOfficeFile(file, extension) {
 }
 
 
-// ─── PDF Reading — FIXED ─────────────────────
+// ─── PDF Reading ──────────────────────────────
 async function readPDF(file) {
+  loadingOverlay.style.display = 'flex';
+  loadingOverlay.querySelector('p').textContent = 'Reading PDF text...';
+
   try {
     // Read the PDF as an ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
@@ -378,30 +381,80 @@ async function readPDF(file) {
 
     extractedText = cleanExtractedText(extractedText);
 
-    // Make sure enough text was extracted
-    if (extractedText.length > 30) {
-      state.rawText = extractedText;
-      showContent();
-    } else {
-      alert(
-        '⚠️ This PDF appears to be image-based or scanned. ' +
-        'GeraBananini can only read PDFs with selectable text. ' +
-        'Please try a text-based PDF or a .txt file.'
-      );
+    // Scanned PDFs often expose only a few characters to PDF.js.
+    const extractedWords = extractedText
+      ? extractedText.split(/\s+/).filter(Boolean).length
+      : 0;
+    const needsOCR = extractedText.length < 80 || extractedWords < 15;
 
-      resetUpload();
+    if (needsOCR) {
+      if (typeof Tesseract === 'undefined') {
+        throw new Error('OCR is unavailable because the OCR library could not be loaded.');
+      }
+
+      extractedText = await extractPDFTextWithOCR(pdf);
     }
+
+    if (!extractedText.trim()) {
+      throw new Error('No readable text was found in this PDF, even after OCR.');
+    }
+
+    state.rawText = extractedText;
+    showContent();
 
   } catch (error) {
     console.error('PDF reading error:', error);
 
     alert(
-      '⚠️ Could not read this PDF.\n\n' +
-      'Please make sure the file is a valid PDF with selectable text.'
+      `⚠️ Could not read this PDF.\n\n${error.message || 'Please make sure the file is valid.'}`
     );
 
     resetUpload();
+  } finally {
+    loadingOverlay.style.display = 'none';
+    loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
   }
+}
+
+async function extractPDFTextWithOCR(pdf) {
+  const pages = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    loadingOverlay.querySelector('p').textContent =
+      `Scanning PDF page ${pageNum} of ${pdf.numPages} with OCR...`;
+
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+
+    if (!context) {
+      throw new Error('Could not create a canvas for PDF OCR.');
+    }
+
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+
+    await page.render({
+      canvasContext: context,
+      viewport
+    }).promise;
+
+    const result = await Tesseract.recognize(canvas, 'eng', {
+      logger: message => {
+        if (message.status === 'recognizing text') {
+          const progress = Math.round(message.progress * 100);
+          loadingOverlay.querySelector('p').textContent =
+            `Scanning PDF page ${pageNum} of ${pdf.numPages} with OCR... ${progress}%`;
+        }
+      }
+    });
+
+    const pageText = cleanExtractedText(result.data.text || '');
+    if (pageText) pages.push(pageText);
+  }
+
+  return pages.join('\n\n').trim();
 }
 
 
