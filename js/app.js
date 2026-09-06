@@ -371,10 +371,8 @@ async function readPDF(file) {
 
       const textContent = await page.getTextContent();
 
-      // Extract actual readable text
-      const pageText = textContent.items
-        .map(item => item.str)
-        .join(' ');
+      // Rebuild the page's visual line and paragraph structure from PDF coordinates.
+      const pageText = extractPDFPageText(textContent);
 
       extractedText += pageText + '\n\n';
     }
@@ -420,6 +418,57 @@ async function readPDF(file) {
     loadingOverlay.style.display = 'none';
     loadingOverlay.querySelector('p').textContent = 'Crunching your document...';
   }
+}
+
+function extractPDFPageText(textContent) {
+  const items = textContent.items
+    .filter(item => typeof item.str === 'string' && item.str.trim())
+    .map(item => ({
+      text: item.str.trim(),
+      y: Array.isArray(item.transform) ? Number(item.transform[5]) : null,
+      height: Number(item.height) || Math.abs(Number(item.transform?.[3])) || 12
+    }))
+    .filter(item => Number.isFinite(item.y));
+
+  if (!items.length) return '';
+
+  const averageHeight =
+    items.reduce((sum, item) => sum + item.height, 0) / items.length;
+  const lineTolerance = Math.max(2, averageHeight * 0.25);
+  const paragraphGap = Math.max(averageHeight * 1.5, 10);
+  const lines = [];
+  let currentLine = null;
+
+  items.forEach(item => {
+    if (!currentLine) {
+      currentLine = { y: item.y, height: item.height, parts: [item.text] };
+      return;
+    }
+
+    const verticalGap = Math.abs(item.y - currentLine.y);
+    if (verticalGap <= lineTolerance) {
+      currentLine.parts.push(item.text);
+      currentLine.height = Math.max(currentLine.height, item.height);
+      return;
+    }
+
+    lines.push(currentLine);
+    currentLine = {
+      y: item.y,
+      height: item.height,
+      parts: [item.text],
+      gapFromPrevious: verticalGap
+    };
+  });
+
+  if (currentLine) lines.push(currentLine);
+
+  return lines
+    .map((line, index) => {
+      const prefix = index > 0 && line.gapFromPrevious > paragraphGap ? '\n' : '';
+      return `${prefix}${line.parts.join(' ')}`;
+    })
+    .join('\n');
 }
 
 async function extractPDFTextWithOCR(pdf) {
