@@ -1665,12 +1665,49 @@ function splitAcademicUnits(text) {
 }
 
 function extractCodeBlocks(text) {
-  const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
-  const codeLines = lines.filter(line =>
-    /#include|using namespace|int main|void \w+\s*\(|\breturn\s+[^.]+;|<\w+[^>]*>|[.#][\w-]+\s*\{|[a-z-]+\s*:\s*[^;]+;/.test(line)
-  );
+  const lines = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n|•/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const blocks = [];
+  let currentBlock = [];
 
-  return codeLines.length ? [codeLines.join('\n')] : [];
+  lines.forEach(line => {
+    if (isCodeLine(line)) {
+      currentBlock.push(line);
+      return;
+    }
+
+    if (currentBlock.length) {
+      blocks.push(currentBlock.join('\n'));
+      currentBlock = [];
+    }
+  });
+
+  if (currentBlock.length) {
+    blocks.push(currentBlock.join('\n'));
+  }
+
+  return blocks;
+}
+
+function isCodeLine(line) {
+  const codePatterns = [
+    /^\s*#(?:include|define|if|ifdef|endif)\b/,
+    /^\s*(?:using\s+namespace|namespace)\s+\w+/,
+    /^\s*(?:int|char|float|double|bool|string|auto|const)\s+\w+\s*(?:[=;(,\[]|$)/,
+    /^\s*(?:void|int|char|float|double|bool|string)\s+\w+\s*\([^)]*\)\s*(?:\{|;|$)/,
+    /^\s*(?:if|else\s+if|else|for|while|switch|case|default)\b.*[({}:]/,
+    /^\s*(?:return|throw)\b.*[;}]$/,
+    /^\s*[{}]\s*(?:else)?\s*[;{]?$|^\s*}\s*else\b/,
+    /\b(?:cout|cin)\s*(?:<<|>>)/,
+    /^\s*<\/?[a-z][\w-]*(?:\s+[^>]*)?>\s*$/i,
+    /^\s*[.#][\w-]+\s*\{/,
+    /^\s*(?:color|background(?:-color)?|font-size|font-family|margin|padding|display|width|height)\s*:\s*[^;]+;\s*$/
+  ];
+
+  return codePatterns.some(pattern => pattern.test(line));
 }
 
 function getReferences(text) {
